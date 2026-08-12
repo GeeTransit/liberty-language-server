@@ -323,35 +323,16 @@ public class LibertyUtils {
         String version  = libertyWorkspace.getLibertyVersion();
         String location = libertyWorkspace.getLibertyInstallationDir();
 
-        LibertyRuntime currentRuntimeInfo = null;
-        Path propsFile = null;
-        boolean updateRuntimeInfo = false;
-
         // return version from cache if set and Liberty is installed
         if (libertyWorkspace.isLibertyRuntimeAndVersionSet() && (libertyWorkspace.isLibertyInstalled() || libertyWorkspace.isContainerAlive())) {
-            // double check that the location has not changed - rare scenario where Liberty was previously installed and then build file
-            // is changed to install somewhere else - should not use old location and potentially wrong runtime/version
-            if (libertyWorkspace.isLibertyInstalled()) {
-                propsFile = getLibertyPropertiesFile(libertyWorkspace);
-                if (propsFile != null && propsFile.toFile().exists()) {
-                    currentRuntimeInfo = new LibertyRuntime(propsFile);
-                    if ((isRuntimeLocationDifferent(currentRuntimeInfo, location))) {
-                        updateRuntimeInfo = true;
-                    }
-                }
-            }
-            if (!updateRuntimeInfo) {
-                return new LibertyRuntime(runtime, version, location);
-            }
+            return new LibertyRuntime(runtime, version, location);
         }
 
         // workspace either has Liberty local or in running container
         Path devcMetadataFile = libertyWorkspace.findDevcMetadata();
         boolean devcOn = devcMetadataFile != null;
 
-        if (devcOn || !updateRuntimeInfo) {
-            propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
-        }
+        Path propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
 
         if (propsFile != null && propsFile.toFile().exists()) {
             // new properties file, reset the installed features stored in the feature cache
@@ -360,11 +341,11 @@ public class LibertyUtils {
             libertyWorkspace.setInstalledFeaturesAndPlatformsList(new FeaturesAndPlatforms());
 
             // add a file watcher on this file
-            if (!libertyWorkspace.isLibertyInstalled() || updateRuntimeInfo) {
+            if (!libertyWorkspace.isLibertyInstalled()) {
                 watchFiles(devcOn ? devcMetadataFile : propsFile, libertyWorkspace);
             }
 
-            LibertyRuntime libertyRuntimeInfo = (devcOn || !updateRuntimeInfo) ? new LibertyRuntime(propsFile) : currentRuntimeInfo;
+            LibertyRuntime libertyRuntimeInfo = new LibertyRuntime(propsFile);
 
             if (libertyRuntimeInfo != null) {
                 libertyWorkspace.setLibertyRuntime(libertyRuntimeInfo.getRuntimeType());
@@ -383,18 +364,6 @@ public class LibertyUtils {
 
         return null;
 
-    }
-
-    public static boolean isRuntimeLocationDifferent(LibertyRuntime runtimeInfo, String location) {
-        String currentLocation = runtimeInfo.getRuntimeLocation();
-
-        if (((currentLocation != null) && (location != null) && !currentLocation.equals(location)) ||
-            (location ==  null && currentLocation != null) ||
-            (currentLocation == null && location != null)) {
-            return true;
-        }
-
-        return false;
     }
 
     /*
