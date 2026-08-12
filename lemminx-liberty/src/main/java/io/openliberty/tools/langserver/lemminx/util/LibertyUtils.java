@@ -349,7 +349,7 @@ public class LibertyUtils {
         Path devcMetadataFile = libertyWorkspace.findDevcMetadata();
         boolean devcOn = devcMetadataFile != null;
 
-        if (propsFile == null) {
+        if (devcOn || !updateRuntimeInfo) {
             propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
         }
 
@@ -360,11 +360,11 @@ public class LibertyUtils {
             libertyWorkspace.setInstalledFeaturesAndPlatformsList(new FeaturesAndPlatforms());
 
             // add a file watcher on this file
-            if (!libertyWorkspace.isLibertyInstalled()) {
+            if (!libertyWorkspace.isLibertyInstalled() || updateRuntimeInfo) {
                 watchFiles(devcOn ? devcMetadataFile : propsFile, libertyWorkspace);
             }
 
-            LibertyRuntime libertyRuntimeInfo = (devcOn || !updateRuntimeInfo) ? new LibertyRuntime(propsFile) : currentRuntimeInfo;
+            LibertyRuntime libertyRuntimeInfo = new LibertyRuntime(propsFile);
 
             if (libertyRuntimeInfo != null) {
                 libertyWorkspace.setLibertyRuntime(libertyRuntimeInfo.getRuntimeType());
