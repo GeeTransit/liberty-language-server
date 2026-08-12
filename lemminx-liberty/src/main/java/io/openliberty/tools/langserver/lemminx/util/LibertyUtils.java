@@ -349,7 +349,7 @@ public class LibertyUtils {
         Path devcMetadataFile = libertyWorkspace.findDevcMetadata();
         boolean devcOn = devcMetadataFile != null;
 
-        if (devcOn || !updateRuntimeInfo) {
+        if (propsFile == null) {
             propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
         }
 
