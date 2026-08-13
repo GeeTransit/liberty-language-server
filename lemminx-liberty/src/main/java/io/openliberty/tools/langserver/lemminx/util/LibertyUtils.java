@@ -332,7 +332,7 @@ public class LibertyUtils {
             // double check that the location has not changed - rare scenario where Liberty was previously installed and then build file
             // is changed to install somewhere else - should not use old location and potentially wrong runtime/version
             if (libertyWorkspace.isLibertyInstalled()) {
-                /*
+                LOGGER.info("[gee] walking tree");
                 propsFile = getLibertyPropertiesFile(libertyWorkspace);
                 if (propsFile != null && propsFile.toFile().exists()) {
                     currentRuntimeInfo = new LibertyRuntime(propsFile);
@@ -340,7 +340,6 @@ public class LibertyUtils {
                         updateRuntimeInfo = true;
                     }
                 }
-                */
             }
             if (!updateRuntimeInfo) {
                 return new LibertyRuntime(runtime, version, location);
