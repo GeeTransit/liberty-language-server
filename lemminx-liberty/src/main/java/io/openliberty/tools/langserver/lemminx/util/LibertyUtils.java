@@ -185,6 +185,7 @@ public class LibertyUtils {
      * @return List<Path> collection of Path that match the given nameOrExtension in the specified dir Path.
      */
     public static List<Path> findFilesEndsWithInDirectory(Path dir, String nameOrExtension) throws IOException {
+        LOGGER.log(java.util.logging.Level.INFO, "[gee] walk", new Exception());
         List<Path> matchingFiles = Files.walk(dir)
                 .filter(p -> (Files.isRegularFile(p) && p.toFile().getName().toLowerCase().endsWith(nameOrExtension)))
                 .collect(Collectors.toList());
@@ -201,6 +202,7 @@ public class LibertyUtils {
      * @return List<Path> collection of Path that match the given filePath in the specified dir Path.
      */
     public static List<Path> findFilesInDirectory(Path dir, Path filePath) throws IOException {
+        LOGGER.log(java.util.logging.Level.INFO, "[gee] walk", new Exception());
         List<Path> matchingFiles = Files.walk(dir)
                 .filter(p -> (Files.isRegularFile(p) && p.endsWith(filePath)))
                 .collect(Collectors.toList());
@@ -332,9 +334,7 @@ public class LibertyUtils {
             // double check that the location has not changed - rare scenario where Liberty was previously installed and then build file
             // is changed to install somewhere else - should not use old location and potentially wrong runtime/version
             if (libertyWorkspace.isLibertyInstalled()) {
-                LOGGER.info("[gee] walking tree");
                 propsFile = getLibertyPropertiesFile(libertyWorkspace);
-                LOGGER.info("[gee] walked tree");
                 if (propsFile != null && propsFile.toFile().exists()) {
                     currentRuntimeInfo = new LibertyRuntime(propsFile);
                     if ((isRuntimeLocationDifferent(currentRuntimeInfo, location))) {
