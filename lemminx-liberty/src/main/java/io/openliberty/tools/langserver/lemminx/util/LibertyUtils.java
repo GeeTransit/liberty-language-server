@@ -334,6 +334,7 @@ public class LibertyUtils {
             if (libertyWorkspace.isLibertyInstalled()) {
                 LOGGER.info("[gee] walking tree");
                 propsFile = getLibertyPropertiesFile(libertyWorkspace);
+                LOGGER.info("[gee] walked tree");
                 if (propsFile != null && propsFile.toFile().exists()) {
                     currentRuntimeInfo = new LibertyRuntime(propsFile);
                     if ((isRuntimeLocationDifferent(currentRuntimeInfo, location))) {
