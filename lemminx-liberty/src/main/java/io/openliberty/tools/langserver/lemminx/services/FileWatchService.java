@@ -131,6 +131,13 @@ public class FileWatchService {
                     SettingsService.getInstance().populateVariablesForWorkspace(workspace);
                     LOGGER.info("Liberty XML variables updated for workspace URI " + workspace.getWorkspaceString());
                 }
+                // Invalidate cached file-search results when liberty-plugin-config.xml is created,
+                // changed, or deleted, so the next LSP request re-resolves the paths via Files.walk.
+                if (file.getName().equals("liberty-plugin-config.xml")) {
+                    workspace.setCachedPluginConfigPath(null);
+                    workspace.setCachedPropertiesFilePath(null);
+                    LOGGER.info("Cleared file path caches for workspace URI " + workspace.getWorkspaceString());
+                }
             }
         });
     }

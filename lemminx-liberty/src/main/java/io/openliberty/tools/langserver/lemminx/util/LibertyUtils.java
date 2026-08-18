@@ -241,6 +241,7 @@ public class LibertyUtils {
 
     /**
      * Given a Path and a LibertyWorkspace, find the most recently edited file that matches the given Path.
+     * For liberty-plugin-config.xml the result is cached on the workspace to avoid repeated full-tree walks.
      * 
      * @param libertyWorkspace
      * @param filePath
@@ -250,9 +251,20 @@ public class LibertyUtils {
         if (libertyWorkspace.getWorkspaceURI() == null) {
             return null;
         }
+        boolean isPluginConfig = filePath.equals(Paths.get("liberty-plugin-config.xml"));
+        if (isPluginConfig) {
+            Path cached = libertyWorkspace.getCachedPluginConfigPath();
+            if (cached != null) {
+                return cached.toFile().exists() ? cached : null;
+            }
+        }
         try {
             Path rootPath = Paths.get(libertyWorkspace.getWorkspaceURI());
-            return findLastModifiedMatchingFileInDirectory(rootPath, filePath);
+            Path result = findLastModifiedMatchingFileInDirectory(rootPath, filePath);
+            if (isPluginConfig) {
+                libertyWorkspace.setCachedPluginConfigPath(result);
+            }
+            return result;
         } catch (IOException e) {
             LOGGER.warning("Could not find: " + filePath.toString() + ": " + e.getMessage());
             return null;
@@ -325,35 +337,19 @@ public class LibertyUtils {
         String version  = libertyWorkspace.getLibertyVersion();
         String location = libertyWorkspace.getLibertyInstallationDir();
 
-        LibertyRuntime currentRuntimeInfo = null;
-        Path propsFile = null;
-        boolean updateRuntimeInfo = false;
-
-        // return version from cache if set and Liberty is installed
+        // Location-change detection is handled by the watchFiles thread: when the properties
+        // file is modified or deleted it calls setLibertyInstalled(false), which clears
+        // isLibertyInstalled and the cachedPropertiesFilePath, causing a fresh lookup on the
+        // next request. No re-verification walk is needed on the hot path.
         if (libertyWorkspace.isLibertyRuntimeAndVersionSet() && (libertyWorkspace.isLibertyInstalled() || libertyWorkspace.isContainerAlive())) {
-            // double check that the location has not changed - rare scenario where Liberty was previously installed and then build file
-            // is changed to install somewhere else - should not use old location and potentially wrong runtime/version
-            if (libertyWorkspace.isLibertyInstalled()) {
-                propsFile = getLibertyPropertiesFile(libertyWorkspace);
-                if (propsFile != null && propsFile.toFile().exists()) {
-                    currentRuntimeInfo = new LibertyRuntime(propsFile);
-                    if ((isRuntimeLocationDifferent(currentRuntimeInfo, location))) {
-                        updateRuntimeInfo = true;
-                    }
-                }
-            }
-            if (!updateRuntimeInfo) {
-                return new LibertyRuntime(runtime, version, location);
-            }
+            return new LibertyRuntime(runtime, version, location);
         }
 
         // workspace either has Liberty local or in running container
         Path devcMetadataFile = libertyWorkspace.findDevcMetadata();
         boolean devcOn = devcMetadataFile != null;
 
-        if (devcOn || !updateRuntimeInfo) {
-            propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
-        }
+        Path propsFile = devcOn ? getLibertyPropertiesFileForDevc(libertyWorkspace) : getLibertyPropertiesFile(libertyWorkspace);
 
         if (propsFile != null && propsFile.toFile().exists()) {
             // new properties file, reset the installed features stored in the feature cache
@@ -362,11 +358,11 @@ public class LibertyUtils {
             libertyWorkspace.setInstalledFeaturesAndPlatformsList(new FeaturesAndPlatforms());
 
             // add a file watcher on this file
-            if (!libertyWorkspace.isLibertyInstalled() || updateRuntimeInfo) {
+            if (!libertyWorkspace.isLibertyInstalled()) {
                 watchFiles(devcOn ? devcMetadataFile : propsFile, libertyWorkspace);
             }
 
-            LibertyRuntime libertyRuntimeInfo = (devcOn || !updateRuntimeInfo) ? new LibertyRuntime(propsFile) : currentRuntimeInfo;
+            LibertyRuntime libertyRuntimeInfo = new LibertyRuntime(propsFile);
 
             if (libertyRuntimeInfo != null) {
                 libertyWorkspace.setLibertyRuntime(libertyRuntimeInfo.getRuntimeType());
@@ -405,10 +401,18 @@ public class LibertyUtils {
      * which is only present for WebSphere Liberty. If not found, then look for openliberty.properties which is present in both WebSphere Liberty and Open Liberty, 
      * but whose productId is only correct for Open Liberty.
      * 
+     * The cache is cleared by setLibertyInstalled(false), which is called by the watchFiles thread when
+     * the properties file is modified or deleted.
+     *
      * @param libertyWorkspace
      * @return Path to the properties file to use, or null if not found
      */
     public static Path getLibertyPropertiesFile(LibertyWorkspace libertyWorkspace) {
+        Path cached = libertyWorkspace.getCachedPropertiesFilePath();
+        if (cached != null && cached.toFile().exists()) {
+            return cached;
+        }
+
         Path props = null;
  
         // check for Liberty installation using liberty-plugin-config.xml which should ensure using the latest Liberty install for the workspace
@@ -442,6 +446,7 @@ public class LibertyUtils {
             }
         }
 
+        libertyWorkspace.setCachedPropertiesFilePath(props);
         return props;
     }
 
@@ -509,11 +514,13 @@ public class LibertyUtils {
      * @param libertyWorkspace Liberty Workspace object, updated to indicate if
      *                         there is an associated installation of Liberty
      */
-    public static void watchFiles(Path watchFile, LibertyWorkspace libertyWorkspace) {     
-        boolean isProperties = watchFile.endsWith("openliberty.properties"); // if false, watchFile is a metadata file
+    public static void watchFiles(Path watchFile, LibertyWorkspace libertyWorkspace) {
+        boolean isProperties = watchFile.endsWith("openliberty.properties")
+                            || watchFile.endsWith("WebSphereApplicationServer.properties");
         try {
             WatchService watcher = FileSystems.getDefault().newWatchService();
-            watchFile.getParent().register(watcher, StandardWatchEventKinds.ENTRY_MODIFY);
+            watchFile.getParent().register(watcher, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_DELETE);
+            String watchFileName = watchFile.getFileName().toString();
             thread = new Thread(() -> {
                 WatchKey watchKey = null;
                 try {
@@ -522,10 +529,12 @@ public class LibertyUtils {
                         if (watchKey != null) {
                             watchKey.pollEvents().stream().forEach(event -> {                                
                                 if (isProperties) {
-                                    // if modified re-calculate version
-                                    LOGGER.info("Liberty properties file (" + watchFile + ") has been modified: "
-                                    + event.context());
-                                    libertyWorkspace.setLibertyInstalled(false);
+                                    // only react to events on the specific properties file being watched
+                                    if (watchFileName.equals(event.context().toString())) {
+                                        LOGGER.info("Liberty properties file (" + watchFile + ") has been modified or deleted: "
+                                                + event.context());
+                                        libertyWorkspace.setLibertyInstalled(false);
+                                    }
                                 } else if (((Path)event.context()).toString().endsWith("-liberty-devc-metadata.xml")){
                                     // watch and execute only on metadata files
                                     DevcMetadata devcMetadata = LibertyWorkspace.unmarshalDevcMetadataFile(watchFile);

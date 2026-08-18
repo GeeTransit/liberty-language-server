@@ -45,6 +45,10 @@ public class LibertyWorkspace {
     private String libertyInstallationDir;
     private FeatureListGraph featureListGraph;
 
+    // Cached file paths to avoid repeated Files.walk calls on every LSP request
+    private Path cachedPluginConfigPath;
+    private Path cachedPropertiesFilePath;
+
     // devc vars
     private String containerName;
     private String containerType;
@@ -68,6 +72,8 @@ public class LibertyWorkspace {
         this.containerType = "docker";
         this.containerAlive = false;
         this.featureListGraph = new FeatureListGraph();
+        this.cachedPluginConfigPath = null;
+        this.cachedPropertiesFilePath = null;
     }
 
     public String getWorkspaceString() {
@@ -112,6 +118,9 @@ public class LibertyWorkspace {
             setLibertyInstallationDir(null);
             // clear the cached feature list when Liberty is no longer installed
             this.installedFeaturesAndPlatformsList = new FeaturesAndPlatforms();
+            // clear file path caches so they are re-resolved on the next request
+            this.cachedPluginConfigPath = null;
+            this.cachedPropertiesFilePath = null;
         }
     }
 
@@ -125,6 +134,22 @@ public class LibertyWorkspace {
 
     public String getLibertyInstallationDir() {
         return this.libertyInstallationDir;
+    }
+
+    public Path getCachedPluginConfigPath() {
+        return this.cachedPluginConfigPath;
+    }
+
+    public void setCachedPluginConfigPath(Path path) {
+        this.cachedPluginConfigPath = path;
+    }
+
+    public Path getCachedPropertiesFilePath() {
+        return this.cachedPropertiesFilePath;
+    }
+
+    public void setCachedPropertiesFilePath(Path path) {
+        this.cachedPropertiesFilePath = path;
     }
 
     public FeaturesAndPlatforms getInstalledFeaturesAndPlatformsList() {
