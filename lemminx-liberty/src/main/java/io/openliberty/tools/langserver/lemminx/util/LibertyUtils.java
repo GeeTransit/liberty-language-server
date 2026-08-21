@@ -240,9 +240,45 @@ public class LibertyUtils {
     }
 
     /**
+     * Returns the path to liberty-plugin-config.xml for the given workspace, using a per-workspace
+     * cache to avoid repeated full-tree walks on every LSP request.
+     * <ul>
+     *   <li>Cache valid, path non-null, file exists → return cached path</li>
+     *   <li>Cache valid, path null → return null (previously searched, not found)</li>
+     *   <li>Cache valid, path non-null, file gone → invalidate, re-walk</li>
+     *   <li>Cache invalid → walk, store result (even if null), return it</li>
+     * </ul>
+     * The cache is invalidated by {@link LibertyWorkspace#invalidatePluginConfigPathCache()},
+     * which is called from {@link LibertyWorkspace#setLibertyInstalled(boolean)} and
+     * {@link FileWatchService} when liberty-plugin-config.xml changes on disk.
+     *
+     * @param libertyWorkspace workspace to search
+     * @return path to liberty-plugin-config.xml, or null if not found
+     */
+    public static Path getPluginConfigFile(LibertyWorkspace libertyWorkspace) {
+        if (libertyWorkspace.getWorkspaceURI() == null) {
+            return null;
+        }
+        if (libertyWorkspace.isPluginConfigPathCacheValid()) {
+            Path cached = libertyWorkspace.getCachedPluginConfigPath();
+            if (cached == null) {
+                return null; // cached: not found
+            }
+            if (cached.toFile().exists()) {
+                return cached;
+            }
+            // file was deleted since last walk — invalidate and re-walk below
+            libertyWorkspace.invalidatePluginConfigPathCache();
+        }
+        Path result = findFileInWorkspace(libertyWorkspace, Paths.get("liberty-plugin-config.xml"));
+        libertyWorkspace.setCachedPluginConfigPath(result);
+        LOGGER.info("Cached plugin config path: " + result);
+        return result;
+    }
+
+    /**
      * Given a Path and a LibertyWorkspace, find the most recently edited file that matches the given Path.
-     * For liberty-plugin-config.xml the result is cached on the workspace to avoid repeated full-tree walks.
-     * 
+     *
      * @param libertyWorkspace
      * @param filePath
      * @return path to given file or null if could not be found
@@ -251,20 +287,9 @@ public class LibertyUtils {
         if (libertyWorkspace.getWorkspaceURI() == null) {
             return null;
         }
-        boolean isPluginConfig = filePath.equals(Paths.get("liberty-plugin-config.xml"));
-        if (isPluginConfig) {
-            Path cached = libertyWorkspace.getCachedPluginConfigPath();
-            if (cached != null) {
-                return cached.toFile().exists() ? cached : null;
-            }
-        }
         try {
             Path rootPath = Paths.get(libertyWorkspace.getWorkspaceURI());
-            Path result = findLastModifiedMatchingFileInDirectory(rootPath, filePath);
-            if (isPluginConfig) {
-                libertyWorkspace.setCachedPluginConfigPath(result);
-            }
-            return result;
+            return findLastModifiedMatchingFileInDirectory(rootPath, filePath);
         } catch (IOException e) {
             LOGGER.warning("Could not find: " + filePath.toString() + ": " + e.getMessage());
             return null;
@@ -408,9 +433,16 @@ public class LibertyUtils {
      * @return Path to the properties file to use, or null if not found
      */
     public static Path getLibertyPropertiesFile(LibertyWorkspace libertyWorkspace) {
-        Path cached = libertyWorkspace.getCachedPropertiesFilePath();
-        if (cached != null && cached.toFile().exists()) {
-            return cached;
+        if (libertyWorkspace.isPropertiesFilePathCacheValid()) {
+            Path cached = libertyWorkspace.getCachedPropertiesFilePath();
+            if (cached == null) {
+                return null; // cached: not found
+            }
+            if (cached.toFile().exists()) {
+                return cached;
+            }
+            // file was deleted since last walk — invalidate and re-walk below
+            libertyWorkspace.invalidatePropertiesFilePathCache();
         }
 
         Path props = null;
@@ -447,6 +479,7 @@ public class LibertyUtils {
         }
 
         libertyWorkspace.setCachedPropertiesFilePath(props);
+        LOGGER.info("Cached properties file path: " + props);
         return props;
     }
 
@@ -488,7 +521,7 @@ public class LibertyUtils {
         }
         try {
             File libertyLSFolder = new File(libertyWorkspace.getDir(), ".libertyls"); //Default to workspaceDir/.libertyls
-            Path pluginConfigFilePath = findFileInWorkspace(libertyWorkspace,Paths.get("liberty-plugin-config.xml"));
+            Path pluginConfigFilePath = getPluginConfigFile(libertyWorkspace);
             if (pluginConfigFilePath != null) { //If liberty-plugin-config.xml exists use its parent directory: buildDir/.libertyls
                 libertyLSFolder = new File(pluginConfigFilePath.getParent().toFile(), ".libertyls");
             }

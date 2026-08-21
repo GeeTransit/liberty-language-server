@@ -45,9 +45,13 @@ public class LibertyWorkspace {
     private String libertyInstallationDir;
     private FeatureListGraph featureListGraph;
 
-    // Cached file paths to avoid repeated Files.walk calls on every LSP request
+    // Cached file paths to avoid repeated Files.walk calls on every LSP request.
+    // The corresponding *Valid flag distinguishes "cached as not-found (null)" from
+    // "never searched yet", so workspaces without Liberty installed skip the walk too.
     private Path cachedPluginConfigPath;
+    private boolean pluginConfigPathCacheValid;
     private Path cachedPropertiesFilePath;
+    private boolean propertiesFilePathCacheValid;
 
     // devc vars
     private String containerName;
@@ -73,7 +77,9 @@ public class LibertyWorkspace {
         this.containerAlive = false;
         this.featureListGraph = new FeatureListGraph();
         this.cachedPluginConfigPath = null;
+        this.pluginConfigPathCacheValid = false;
         this.cachedPropertiesFilePath = null;
+        this.propertiesFilePathCacheValid = false;
     }
 
     public String getWorkspaceString() {
@@ -118,9 +124,9 @@ public class LibertyWorkspace {
             setLibertyInstallationDir(null);
             // clear the cached feature list when Liberty is no longer installed
             this.installedFeaturesAndPlatformsList = new FeaturesAndPlatforms();
-            // clear file path caches so they are re-resolved on the next request
-            this.cachedPluginConfigPath = null;
-            this.cachedPropertiesFilePath = null;
+            // clear file path caches so they are re-resolved on the next request;
+            // invalidatePluginConfigPathCache() cascades into invalidatePropertiesFilePathCache()
+            invalidatePluginConfigPathCache();
         }
     }
 
@@ -136,12 +142,29 @@ public class LibertyWorkspace {
         return this.libertyInstallationDir;
     }
 
+    public boolean isPluginConfigPathCacheValid() {
+        return this.pluginConfigPathCacheValid;
+    }
+
     public Path getCachedPluginConfigPath() {
         return this.cachedPluginConfigPath;
     }
 
     public void setCachedPluginConfigPath(Path path) {
         this.cachedPluginConfigPath = path;
+        this.pluginConfigPathCacheValid = true;
+    }
+
+    public void invalidatePluginConfigPathCache() {
+        this.cachedPluginConfigPath = null;
+        this.pluginConfigPathCacheValid = false;
+        // The properties file path is derived from installDirectory inside the plugin config,
+        // so it must be re-resolved whenever the plugin config is invalidated.
+        invalidatePropertiesFilePathCache();
+    }
+
+    public boolean isPropertiesFilePathCacheValid() {
+        return this.propertiesFilePathCacheValid;
     }
 
     public Path getCachedPropertiesFilePath() {
@@ -150,6 +173,12 @@ public class LibertyWorkspace {
 
     public void setCachedPropertiesFilePath(Path path) {
         this.cachedPropertiesFilePath = path;
+        this.propertiesFilePathCacheValid = true;
+    }
+
+    public void invalidatePropertiesFilePathCache() {
+        this.cachedPropertiesFilePath = null;
+        this.propertiesFilePathCacheValid = false;
     }
 
     public FeaturesAndPlatforms getInstalledFeaturesAndPlatformsList() {

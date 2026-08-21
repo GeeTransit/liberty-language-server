@@ -122,21 +122,22 @@ public class FileWatchService {
                 boolean watchedFileChanged = LibertyConstants.filesToWatch.stream().anyMatch(fileName -> file.getName().contains(fileName));
                 boolean isConfigXmlFile = false;
                 try {
-                    isConfigXmlFile = LibertyUtils.isConfigXMLFile(file.getCanonicalPath());
+                    isConfigXmlFile = LibertyUtils.isConfigXMLFile(workspace.getDir().getCanonicalPath(), file.getCanonicalPath());
                 } catch (IOException e) {
                     LOGGER.warning("Liberty XML variables cannot be updated for file path %s with error %s"
                             .formatted(file.getPath(), e.getMessage()));
                 }
+                // When liberty-plugin-config.xml is created, changed, or deleted, invalidate the
+                // plugin config path cache. This also cascades to invalidate the properties file
+                // path cache, since the properties file location is derived from installDirectory
+                // inside the plugin config.
+                if (file.getName().equals("liberty-plugin-config.xml")) {
+                    workspace.invalidatePluginConfigPathCache();
+                    LOGGER.info("Invalidated file path caches for workspace URI " + workspace.getWorkspaceString());
+                }
                 if (watchedFileChanged || isConfigXmlFile) {
                     SettingsService.getInstance().populateVariablesForWorkspace(workspace);
                     LOGGER.info("Liberty XML variables updated for workspace URI " + workspace.getWorkspaceString());
-                }
-                // Invalidate cached file-search results when liberty-plugin-config.xml is created,
-                // changed, or deleted, so the next LSP request re-resolves the paths via Files.walk.
-                if (file.getName().equals("liberty-plugin-config.xml")) {
-                    workspace.setCachedPluginConfigPath(null);
-                    workspace.setCachedPropertiesFilePath(null);
-                    LOGGER.info("Cleared file path caches for workspace URI " + workspace.getWorkspaceString());
                 }
             }
         });
