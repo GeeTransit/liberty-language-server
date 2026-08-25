@@ -27,8 +27,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -67,6 +69,10 @@ public class LibertyUtils {
     private static final String VAR_PATTERN_REGEX = "\\$\\{(.*?)\\}";
     // Compile the Regex.
     private static final Pattern VAR_PATTERN = Pattern.compile(VAR_PATTERN_REGEX);
+
+    // Cached paths
+    private static final WeakHashMap<LibertyWorkspace, Optional<Path>> cachedPluginConfigPaths = new WeakHashMap<>();
+    private static final WeakHashMap<LibertyWorkspace, Optional<Path>> cachedPropertiesFilePaths = new WeakHashMap<>();
 
     private LibertyUtils() {
     }
@@ -238,6 +244,27 @@ public class LibertyUtils {
     }
 
     /**
+     * Given a workspace, invalidate the cached path to liberty-plugin-config.xml.
+     * Also invalidate the properties file.
+     *
+     * @param libertyWorkspace
+     */
+    public static void invalidatePluginConfigPathCache(LibertyWorkspace libertyWorkspace) {
+        cachedPluginConfigPaths.remove(libertyWorkspace);
+        invalidatePropertiesFilePathCache(libertyWorkspace);
+    }
+
+    /**
+     * Given a workspace, invalidate the cached path to the properties file
+     * (openliberty.properties or WebSphereApplicationServer.properties).
+     *
+     * @param libertyWorkspace
+     */
+    public static void invalidatePropertiesFilePathCache(LibertyWorkspace libertyWorkspace) {
+        cachedPropertiesFilePaths.remove(libertyWorkspace);
+    }
+
+    /**
      * Given a workspace, find a liberty-plugin-config.xml file.
      * Will use the cached path if possible.
      *
@@ -248,19 +275,19 @@ public class LibertyUtils {
         if (libertyWorkspace.getWorkspaceURI() == null) {
             return null;
         }
-        if (libertyWorkspace.isPluginConfigPathCacheValid()) {
-            Path cached = libertyWorkspace.getCachedPluginConfigPath();
-            if (cached == null) {
+        Optional<Path> cached = cachedPluginConfigPaths.get(libertyWorkspace);
+        if (cached != null) {
+            if (cached.isEmpty()) {
                 return null;
             }
-            if (cached.toFile().exists()) {
-                return cached;
+            if (cached.get().toFile().exists()) {
+                return cached.get();
             }
             // invalidate and search again
-            libertyWorkspace.invalidatePluginConfigPathCache();
+            invalidatePluginConfigPathCache(libertyWorkspace);
         }
         Path result = findFileInWorkspace(libertyWorkspace, Paths.get("liberty-plugin-config.xml"));
-        libertyWorkspace.setCachedPluginConfigPath(result);
+        cachedPluginConfigPaths.put(libertyWorkspace, cached.ofNullable(result));
         LOGGER.info("Cached plugin config path: " + result);
         return result;
     }
@@ -435,16 +462,16 @@ public class LibertyUtils {
      * @return Path to the properties file to use, or null if not found
      */
     public static Path getLibertyPropertiesFile(LibertyWorkspace libertyWorkspace) {
-        if (libertyWorkspace.isPropertiesFilePathCacheValid()) {
-            Path cached = libertyWorkspace.getCachedPropertiesFilePath();
-            if (cached == null) {
+        Optional<Path> cached = cachedPropertiesFilePaths.get(libertyWorkspace);
+        if (cached != null) {
+            if (cached.isEmpty()) {
                 return null;
             }
-            if (cached.toFile().exists()) {
-                return cached;
+            if (cached.get().toFile().exists()) {
+                return cached.get();
             }
             // invalidate and search again
-            libertyWorkspace.invalidatePropertiesFilePathCache();
+            invalidatePropertiesFilePathCache(libertyWorkspace);
         }
 
         Path props = null;
@@ -480,7 +507,7 @@ public class LibertyUtils {
             }
         }
 
-        libertyWorkspace.setCachedPropertiesFilePath(props);
+        cachedPropertiesFilePaths.put(libertyWorkspace, Optional.ofNullable(props));
         LOGGER.info("Cached properties file path: " + props);
         return props;
     }

@@ -30,6 +30,7 @@ import io.openliberty.tools.langserver.lemminx.data.FeatureListGraph;
 import io.openliberty.tools.langserver.lemminx.models.feature.Feature;
 import io.openliberty.tools.langserver.lemminx.models.feature.FeaturesAndPlatforms;
 import io.openliberty.tools.langserver.lemminx.models.settings.DevcMetadata;
+import io.openliberty.tools.langserver.lemminx.util.LibertyUtils;
 
 public class LibertyWorkspace {
 
@@ -44,13 +45,6 @@ public class LibertyWorkspace {
     private FeaturesAndPlatforms installedFeaturesAndPlatformsList;
     private String libertyInstallationDir;
     private FeatureListGraph featureListGraph;
-
-    // Cached paths to avoid repeated searches.
-    private Path cachedPluginConfigPath;
-    private Path cachedPropertiesFilePath;
-    // Boolean flag distinguishes cached null from invalidated cache.
-    private boolean pluginConfigPathCacheValid;
-    private boolean propertiesFilePathCacheValid;
 
     // devc vars
     private String containerName;
@@ -75,10 +69,6 @@ public class LibertyWorkspace {
         this.containerType = "docker";
         this.containerAlive = false;
         this.featureListGraph = new FeatureListGraph();
-        this.cachedPluginConfigPath = null;
-        this.cachedPropertiesFilePath = null;
-        this.pluginConfigPathCacheValid = false;
-        this.propertiesFilePathCacheValid = false;
     }
 
     public String getWorkspaceString() {
@@ -124,7 +114,7 @@ public class LibertyWorkspace {
             // clear the cached feature list when Liberty is no longer installed
             this.installedFeaturesAndPlatformsList = new FeaturesAndPlatforms();
             // clear file path caches so they are re-resolved on the next request
-            invalidatePluginConfigPathCache();
+            LibertyUtils.invalidatePluginConfigPathCache(this);
         }
     }
 
@@ -138,44 +128,6 @@ public class LibertyWorkspace {
 
     public String getLibertyInstallationDir() {
         return this.libertyInstallationDir;
-    }
-
-    public boolean isPluginConfigPathCacheValid() {
-        return this.pluginConfigPathCacheValid;
-    }
-
-    public Path getCachedPluginConfigPath() {
-        return this.cachedPluginConfigPath;
-    }
-
-    public void setCachedPluginConfigPath(Path path) {
-        this.cachedPluginConfigPath = path;
-        this.pluginConfigPathCacheValid = true;
-    }
-
-    public void invalidatePluginConfigPathCache() {
-        this.cachedPluginConfigPath = null;
-        this.pluginConfigPathCacheValid = false;
-        // The properties file is derived from installDirectory inside the plugin config.
-        invalidatePropertiesFilePathCache();
-    }
-
-    public boolean isPropertiesFilePathCacheValid() {
-        return this.propertiesFilePathCacheValid;
-    }
-
-    public Path getCachedPropertiesFilePath() {
-        return this.cachedPropertiesFilePath;
-    }
-
-    public void setCachedPropertiesFilePath(Path path) {
-        this.cachedPropertiesFilePath = path;
-        this.propertiesFilePathCacheValid = true;
-    }
-
-    public void invalidatePropertiesFilePathCache() {
-        this.cachedPropertiesFilePath = null;
-        this.propertiesFilePathCacheValid = false;
     }
 
     public FeaturesAndPlatforms getInstalledFeaturesAndPlatformsList() {
