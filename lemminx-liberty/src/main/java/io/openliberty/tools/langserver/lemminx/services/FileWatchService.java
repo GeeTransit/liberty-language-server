@@ -120,10 +120,6 @@ public class FileWatchService {
              * @param workspace current workspace
              */
             private void onAlteration(File file, LibertyWorkspace workspace) {
-                if (file.getName().equals("liberty-plugin-config.xml")) {
-                    LibertyUtils.invalidatePluginConfigPathCache(workspace);
-                    LOGGER.info("Invalidated file path caches for workspace URI " + workspace.getWorkspaceString());
-                }
                 boolean watchedFileChanged = LibertyConstants.filesToWatch.stream().anyMatch(fileName -> file.getName().contains(fileName));
                 boolean isConfigXmlFile = false;
                 try {
